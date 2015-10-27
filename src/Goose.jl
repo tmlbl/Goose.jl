@@ -5,7 +5,7 @@ using Reexport
 @reexport using Mongo
 using LibBSON
 
-export GooseCollection, insert
+export GooseDB, GooseCollection, insert
 
 # Convert Julia type to Dict
 function dict(obj::Any)
@@ -17,10 +17,29 @@ function dict(obj::Any)
   d
 end
 
+type GooseDB
+  cli::MongoClient
+  name::AbstractString
+end
+
 type GooseCollection
   typ::DataType
   coll::MongoCollection
+
+  function GooseCollection(typ, coll)
+    hasid = false
+    for f in fieldnames(typ)
+      if f == :_id
+        hasid = true
+      end
+    end
+    @assert hasid "Types need to have an _id::BSONOID field"
+    new(typ, coll)
+  end
 end
+
+GooseCollection(db::GooseDB, typ::DataType, str::AbstractString) =
+  GooseCollection(typ, MongoCollection(db.cli, db.name, str))
 
 function insert(gc::GooseCollection, obj::Any)
   @assert typeof(obj) == gc.typ

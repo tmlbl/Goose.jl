@@ -2,27 +2,46 @@ using Goose,
       FactCheck
 
 module People
+  using LibBSON
   export Person, Dog
   type Person
+    _id::BSONOID
     name::AbstractString
     age::Int64
   end
+  Person(name, age) = Person(BSONOID(), name, age)
   type Dog
+    _id::BSONOID
     name::AbstractString
     master::Person
   end
+  Dog(name, master) = Dog(BSONOID(), name, master)
+end
+
+type NoID
+  foo::Int64
 end
 
 using People
 
-mcli = MongoClient()
+db = GooseDB(MongoClient(), "pdb")
 
 facts("Goose") do
-  people = GooseCollection(Person, MongoCollection(mcli, "pdb", "people"))
-  dogs = GooseCollection(Dog, MongoCollection(mcli, "pdb", "dogs"))
+  people = GooseCollection(db, Person, "people")
+  dogs = GooseCollection(db, Dog, "dogs")
+
+  context("Inserts some models") do
+    tim = Person("Tim", 25)
+    rover = Dog("Rover", tim)
+    @fact insert(people, tim) --> tim._id
+    @fact insert(dogs, rover) --> rover._id
+  end
+
+  context("Requires that model has _id field") do
+    @fact_throws GooseCollection(NoID, MongoCollection(mcli, "pdb", "noids"))
+  end
 
   context("Only inserts correct type") do
-    @fact typeof(insert(people, Person("Tim", 25))) --> Mongo.BSONOID
     @fact_throws insert(people, Dog("Rover", Person("Tim", 25)))
     @fact_throws insert(dogs, Person("Tim", 25))
   end
@@ -31,5 +50,4 @@ facts("Goose") do
     @fact typeof(first(find(people, ("age" => 25)))) --> Person
     @fact first(find(people, ("age" => 25))).name --> "Tim"
   end
-
 end
