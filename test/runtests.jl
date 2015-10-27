@@ -1,6 +1,8 @@
 using Goose,
       FactCheck
 
+using Goose: jl2bson
+
 module People
   using LibBSON
   export Person, Dog
@@ -30,6 +32,24 @@ facts("Goose") do
   people = GooseCollection(db, Person, "people")
   dogs = GooseCollection(db, Dog, "dogs")
 
+  context("Builds the DB map") do
+    @fact haskey(Goose.dbmap, "pdb") --> true
+    @fact Goose.dbmap["pdb"][1] --> people
+    @fact Goose.dbmap["pdb"][2] --> dogs
+  end
+
+  context("Serializes models") do
+    tim = Person("Tim", 25)
+    bso = jl2bson(tim)
+    @show bso
+    @fact typeof(bso) --> BSONObject
+    @fact bso["name"] --> "Tim"
+    @fact bso["age"] --> 25
+
+    bso = jl2bson(Dog("Rover", tim))
+    @show bso
+  end
+
   context("Inserts some models") do
     tim = Person("Tim", 25)
     rover = Dog("Rover", tim)
@@ -38,7 +58,7 @@ facts("Goose") do
   end
 
   context("Requires that model has _id field") do
-    @fact_throws GooseCollection(NoID, MongoCollection(mcli, "pdb", "noids"))
+    @fact_throws GooseCollection(db, NoID, "noids")
   end
 
   context("Only inserts correct type") do
