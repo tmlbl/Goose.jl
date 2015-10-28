@@ -7,21 +7,9 @@ using Reexport
 
 export GooseDB, GooseCollection, insert
 
-bsontypes = map((m) -> begin
-  length(m.sig.types) > 2 ? m.sig.types[3] : nothing
-end, methods(LibBSON.append))
+include("DBRef.jl")
+include("bson.jl")
 
-bsontypes = filter((x) -> x != nothing, bsontypes)
-
-# Convert Julia type to Dict
-function dict(obj::Any)
-  ctyp = promote_type((typeof(obj).types)...)
-  d = Dict{ASCIIString,ctyp}()
-  for f in fieldnames(obj)
-    d[string(f)] = obj.(f)
-  end
-  d
-end
 
 type GooseDB
   cli::MongoClient
@@ -34,11 +22,12 @@ type GooseDB
 end
 
 type GooseCollection
+  name::AbstractString
   dbname::AbstractString
   typ::DataType
   coll::MongoCollection
 
-  function GooseCollection(dbname, typ, coll)
+  function GooseCollection(name, dbname, typ, coll)
     hasid = false
     for f in fieldnames(typ)
       if f == :_id
@@ -46,21 +35,21 @@ type GooseCollection
       end
     end
     @assert hasid "Types need to have an _id::BSONOID field"
-    c = new(dbname, typ, coll)
+    c = new(name, dbname, typ, coll)
     push!(dbmap[dbname], c)
     c
   end
 end
 
 GooseCollection(db::GooseDB, typ::DataType, str::AbstractString) =
-  GooseCollection(db.name, typ, MongoCollection(db.cli, db.name, str))
+  GooseCollection(str, db.name, typ, MongoCollection(db.cli, db.name, str))
 
 # Keep track of instantiated collections
 dbmap = Dict{AbstractString,Array{GooseCollection,1}}()
 
 function insert(gc::GooseCollection, obj::Any)
   @assert typeof(obj) == gc.typ
-  Mongo.insert(gc.coll, dict(obj))
+  Mongo.insert(gc.coll, jl2bson(obj))
 end
 
 type GooseCursor
@@ -68,39 +57,6 @@ type GooseCursor
   cur::MongoCursor
 end
 
-function bson2jl(doc::BSONObject, typ::DataType)
-  fields = map((f) -> doc[string(f)], fieldnames(typ))
-  typ(fields...)
-end
-
-function is_bsontype(it::Any)
-  typ = typeof(it)
-  is = false
-  for t in bsontypes
-    if typ <: t
-      is = true
-    end
-  end
-  is
-end
-
-function jl2bson(obj::Any)
-  bso = BSONObject()
-  for k in fieldnames(obj)
-    if is_bsontype(obj.(k))
-      append(bso, string(k), obj.(k))
-    else
-      for (db, colls) in dbmap
-        for c in colls
-          if c.typ == typeof(obj.(k))
-            append(bso, string(k), obj.(k)._id)
-          end
-        end
-      end
-    end
-  end
-  bso
-end
 
 Base.start(gc::GooseCursor) = begin
   start(gc.cur)

@@ -41,13 +41,12 @@ facts("Goose") do
   context("Serializes models") do
     tim = Person("Tim", 25)
     bso = jl2bson(tim)
-    @show bso
     @fact typeof(bso) --> BSONObject
     @fact bso["name"] --> "Tim"
     @fact bso["age"] --> 25
 
     bso = jl2bson(Dog("Rover", tim))
-    @show bso
+    @fact bso["master"]["\$id"] --> tim._id
   end
 
   context("Inserts some models") do
@@ -69,5 +68,10 @@ facts("Goose") do
   context("Queries the collection") do
     @fact typeof(first(find(people, ("age" => 25)))) --> Person
     @fact first(find(people, ("age" => 25))).name --> "Tim"
+  end
+
+  context("Fetches DBRef") do
+    rover = first(find(dogs, ("name" => "Rover")))
+    @show rover
   end
 end
