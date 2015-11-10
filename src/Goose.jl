@@ -5,6 +5,8 @@ using Reexport
 @reexport using Mongo
 @reexport using LibBSON
 
+using Base.Dates
+
 export GooseDB, GooseCollection, insert
 
 include("DBRef.jl")

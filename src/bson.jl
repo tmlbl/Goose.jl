@@ -19,14 +19,21 @@ function is_bsontype(it::Any)
   is_bsontype(typ)
 end
 
+function isdbref(bso::BSONObject)
+
+end
+
 function bson2jl(doc::BSONObject, typ::DataType)
   fields = map((f) -> begin
     it = doc[string(f[1])]
     @show f[1]
-    if !is_bsontype(f[2])
-      println("REF $(f[2])")
+    if is_bsontype(f[2])
+      it
+    else
+      if typeof(it) == BSONObject && isdbref(it)
+
+      end
     end
-    it
   end, zip(fieldnames(typ), typ.types))
   typ(fields...)
 end
@@ -48,4 +55,31 @@ function jl2bson(obj::Any)
     end
   end
   bso
+end
+
+json_serializers = Dict{DataType,Function}(
+  Real => identity,
+  AbstractString => identity,
+  DateTime => (d) -> Dates.format(d, ISODateTimeFormat),
+  Date => (d) -> Dates.format(d, ISODateFormat),
+  BSONOID => string,
+  Any => (a) -> error("Type $(typeof(a)) not supported")
+)
+
+function json_convert(t::Type, o::Any)
+  if haskey(json_serializers, t)
+    return json_serializers[t](o)
+  else
+    return json_convert(super(t), o)
+  end
+end
+
+json_convert(o) = json_convert(typeof(o), o)
+
+function jl2json(obj::Any)
+  d = Dict{Symbol,Any}()
+  for k in fieldnames(obj)
+    d[k] = json_convert(obj.(k))
+  end
+  d
 end
